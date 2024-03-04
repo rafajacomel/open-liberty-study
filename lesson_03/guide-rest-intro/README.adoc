@@ -1,0 +1,253 @@
+//  Copyright (c) 2017, 2024 IBM Corporation and others.
+// Licensed under Creative Commons Attribution-NoDerivatives
+// 4.0 International (CC BY-ND 4.0)
+//   https://creativecommons.org/licenses/by-nd/4.0/
+//
+// Contributors:
+//     IBM Corporation
+//
+:projectid: rest-intro
+:page-layout: guide-multipane
+:page-duration: 30 minutes
+:page-releasedate: 2017-09-19
+:page-guide-category: microprofile
+:page-essential: true
+:page-essential-order: 1
+:page-description: Learn how to create a RESTful service with Jakarta Restful Web Services, JSON-B, and Open Liberty.
+:guide-author: Open Liberty
+:page-tags: ['microprofile', 'jakarta-ee']
+:page-related-guides: ['rest-client-java', 'rest-client-angularjs']
+:page-permalink: /guides/{projectid}
+:page-seo-title: Building a simple RESTful Java microservice using Jakarta Restful Web Services, formerly known as JAX-RS, and JSON-B
+:page-seo-description: A getting started tutorial with examples of how to create a RESTful Java microservice in Open Liberty using the Java API for Jakarta Restful Web Services, formerly known as JAX-RS, and JSON Binding (JSON-B).
+:common-includes: https://raw.githubusercontent.com/OpenLiberty/guides-common/prod
+= Creating a RESTful web service
+
+[.hidden]
+NOTE: This repository contains the guide documentation source. To view the guide in published form, view it on the https://openliberty.io/guides/{projectid}.html[Open Liberty website].
+
+Learn how to create a RESTful service with Jakarta Restful Web Services, JSON-B, and Open Liberty.
+
+
+// =================================================================================================
+// What you'll learn
+// =================================================================================================
+
+== What you'll learn
+
+You will learn how to build and test a simple RESTful service with Jakarta Restful Web Services and JSON-B, which will expose the JVM's system properties. The RESTful service responds to `GET` requests made to the `\http://localhost:9080/LibertyProject/system/properties` URL.
+
+The service responds to a `GET` request with a JSON representation of the system properties, where each property is a field in a JSON object, like this:
+
+[source,json,role="no_copy"]
+----
+{
+  "os.name":"Mac",
+  "java.version": "1.8"
+}
+----
+
+The design of an HTTP API is an essential part of creating a web application. The REST API is the go-to architectural style for building an HTTP API. The Jakarta Restful Web Services API offers functions to create, read, update, and delete exposed resources. The Jakarta Restful Web Services API supports the creation of RESTful web services that are performant, scalable, and modifiable.
+
+[role="command"]
+include::{common-includes}/gitclone.adoc[]
+
+[role='command']
+include::{common-includes}/twyb-intro.adoc[]
+
+Check out the service at the http://localhost:9080/LibertyProject/system/properties[^] URL. 
+
+[role='command']
+include::{common-includes}/twyb-end.adoc[]
+
+// =================================================================================================
+// Creating a RESTful application
+// =================================================================================================
+
+== Creating a RESTful application
+
+Navigate to the `start` directory to begin.
+// cloud-hosted guide instructions:
+ifdef::cloud-hosted[]
+```bash
+cd /home/project/guide-rest-intro/start
+```
+endif::[]
+
+[role='command']
+include::{common-includes}/devmode-lmp33-start.adoc[]
+
+Jakarta Restful Web Services defines two key concepts for creating REST APIs. The most obvious one is the resource itself, which is modelled as a class. The second is a RESTful application, which groups all exposed resources under a common path. You can think of the RESTful application as a wrapper for all of your resources.
+
+
+[role="code_command hotspot" ,subs="quotes"]
+----
+#Replace the `SystemApplication` class.#
+`src/main/java/io/openliberty/guides/rest/SystemApplication.java`
+----
+
+SystemApplication.java
+[source, Java, linenums, role='code_column hide_tags=copyright']
+----
+include::finish/src/main/java/io/openliberty/guides/rest/SystemApplication.java[]
+----
+
+The [hotspot=systemApplication]`SystemApplication` class extends the `Application` class, which associates all RESTful resource classes in the WAR file with this RESTful application. These resources become available under the common path that's specified with the [hotspot=applicationPath]`@ApplicationPath` annotation. The `@ApplicationPath` annotation has a value that indicates the path in the WAR file that the RESTful application accepts requests from.
+
+// =================================================================================================
+// Creating the RESTful resource
+// =================================================================================================
+
+== Creating the RESTful resource
+
+In a RESTful application, a single class represents a single resource, or a group of resources of the same type. In this application, a resource might be a system property, or a set of system properties. A single class can easily handle multiple different resources, but keeping a clean separation between types of resources helps with maintainability in the long run.
+
+[role="code_command hotspot", subs="quotes"]
+----
+#Create the `PropertiesResource` class.#
+`src/main/java/io/openliberty/guides/rest/PropertiesResource.java`
+----
+
+PropertiesResource.java
+[source,java,linenums,role='code_column hide_tags=copyright']
+----
+include::finish/src/main/java/io/openliberty/guides/rest/PropertiesResource.java[]
+----
+
+SystemApplication.java
+[source,java,linenums,role='code_column hide_tags=copyright']
+----
+include::finish/src/main/java/io/openliberty/guides/rest/SystemApplication.java[]
+----
+
+The [hotspot=path file=0]`@Path` annotation on the class indicates that this resource responds to the `properties` path in the RESTful Web Services application. The [hotspot=applicationPath file=1]`@ApplicationPath` annotation in the [hotspot=systemApplication file=1]`SystemApplication` class together with the [hotspot=path file=0]`@Path` annotation in this class indicates that the resource is available at the `system/properties` path.
+
+Jakarta Restful Web Services maps the HTTP methods on the URL to the methods of the class by using annotations. Your application uses the [hotspot=get]`GET` annotation to map an HTTP `GET` request to the `system/properties` path.
+
+The [hotspot=get file=0]`@GET` annotation on the method indicates that this method is called for the HTTP `GET` method. The [hotspot=produces file=0]`@Produces` annotation indicates the format of the content that is returned. The value of the [hotspot=produces file=0]`@Produces` annotation is specified in the HTTP `Content-Type` response header. This application returns a JSON structured. The desired `Content-Type` for a JSON response is `application/json`, with `MediaType.APPLICATION_JSON` instead of the `String` content type. Using a constant such as `MediaType.APPLICATION_JSON` is better because a spelling error results in a compile failure.
+
+Jakarta Restful Web Services supports a number of ways to marshal JSON. The Jakarta Restful Web Services specification mandates JSON-Binding (JSON-B). The method body returns the result of `System.getProperties()`, which is of type `java.util.Properties`. The method is annotated with `@Produces(MediaType.APPLICATION_JSON)` so Jakarta Restful Web Services uses JSON-B to automatically convert the returned object to JSON data in the HTTP response.
+
+// =================================================================================================
+// Configuring Liberty
+// =================================================================================================
+
+== Configuring Liberty
+
+To get the service running, the Liberty `server.xml` configuration file needs to be correctly configured.
+
+[role="code_command hotspot", subs="quotes"]
+----
+#Replace the Liberty `server.xml` configuration file.#
+`src/main/liberty/config/server.xml`
+----
+
+server.xml
+[source,xml,linenums,role="code_column"]
+----
+include::finish/src/main/liberty/config/server.xml[]
+----
+
+The configuration does the following actions:
+
+* Configures Liberty to enable Jakarta Restful Web Services. This is specified in the [hotspot=featureManager file=0]`featureManager` element.
+* Configures Liberty to resolve the HTTP port numbers from variables, which are then specified in the Maven [hotspot=defaultHttpPort hotspot=defaultHttpsPort file=1]`pom.xml` file. This is specified in the [hotspot=httpEndpoint file=0]`httpEndpoint` element. Variables use the `${variableName}` syntax.
+* Configures Liberty to run the produced web application on a context root specified in the [hotspot=appContextRoot file=1]`pom.xml` file. This is specified in the [hotspot=webApplication file=0]`webApplication` element.
+
+pom.xml
+[source,xml,linenums,role="code_column"]
+----
+include::finish/pom.xml[]
+----
+
+The variables that are being used in the [hotspot=httpEndpoint hotspot=webApplication file=0]`server.xml` file are provided by the properties set in the Maven [hotspot=defaultHttpPort hotspot=defaultHttpsPort hotspot=appContextRoot file=1]`pom.xml` file. The properties must be formatted as `liberty.var.variableName`.
+
+// =================================================================================================
+// Running the application
+// =================================================================================================
+
+[role='command']
+include::{common-includes}/devmode-build.adoc[]
+
+Check out the service that you created at the http://localhost:9080/LibertyProject/system/properties[^] URL. 
+
+// =================================================================================================
+// Testing the service
+// =================================================================================================
+
+== Testing the service
+
+// static guide instructions:
+ifndef::cloud-hosted[]
+You can test this service manually by starting Liberty and pointing a web browser at the http://localhost:9080/LibertyProject/system/properties[^] URL. However, automated tests are a much better approach because they trigger a failure if a change introduces a bug. JUnit and the Jakarta Restful Web Services Client API provide a simple environment to test the application.
+endif::[]
+
+// cloud-hosted guide instructions:
+ifdef::cloud-hosted[]
+You can test this service manually by starting Liberty and visiting the http://localhost:9080/LibertyProject/system/properties URL. However, automated tests are a much better approach because they trigger a failure if a change introduces a bug. JUnit and the Jakarta Restful Web Services Client API provide a simple environment to test the application.
+endif::[]
+
+You can write tests for the individual units of code outside of a running Liberty instance, or they can be written to call the Liberty instance directly. In this example, you will create a test that does the latter.
+
+[role="code_command hotspot", subs="quotes"]
+----
+#Create the `EndpointIT` class.#
+`src/test/java/it/io/openliberty/guides/rest/EndpointIT.java`
+----
+
+EndpointIT.java
+[source, Java, linenums, role="code_column hide_tags=copyright"]
+----
+include::finish/src/test/java/it/io/openliberty/guides/rest/EndpointIT.java[]
+----
+
+This test class has more lines of code than the resource implementation. This situation is common. The test method is indicated with the [hotspot=test file=0]`@Test` annotation.
+
+pom.xml
+[source , xml, linenums,role="code_column"]
+----
+include::finish/pom.xml[]
+----
+
+The test code needs to know some information about the application to make requests. The server port and the application context root are key, and are dictated by the Liberty's configuration. While this information can be hardcoded, it is better to specify it in a single place like the Maven [hotspot=defaultHttpPort hotspot=defaultHttpsPort hotspot=appContextRoot file=1]`pom.xml` file. Refer to the [hotspot file=1]`pom.xml` file to see how the application information such as the [hotspot=defaultHttpPort file=1]`http.port`, [hotspot=defaultHttpsPort file=1]`https.port` and [hotspot=appContextRoot file=1]`app.context.root` elements are provided in the file.
+
+
+These Maven properties are then passed to the Java test program as the [hotspot=testsysprops file=1]`systemPropertyVariables` element in the [hotspot file=1]`pom.xml` file.
+
+Getting the values to create a representation of the URL is simple. The test class uses the [hotspot=systemProperties file=0]`getProperty` method to get the application details.
+
+To call the RESTful service using the Jakarta Restful Web Services client, first create a `WebTarget` object by calling the [hotspot=target file=0]`target` method that provides the URL. To cause the HTTP request to occur, the [hotspot=requestget file=0]`request().get()` method is called on the `WebTarget` object. The [hotspot=requestget file=0]`get` method call is a synchronous call that blocks until a response is received. This call returns a [hotspot=requestget file=0]`Response` object, which can be inspected to determine whether the request was successful.
+
+The first thing to check is that a `200` response was received. The JUnit [hotspot=assertequals file=0]`assertEquals` method can be used for this check.
+
+Check the response body to ensure it returned the right information. The client and the server are running on the same machine so it is reasonable to expect that the system properties for the local and remote JVM would be the same. In this case, an [hotspot=assertosname file=0]`assertEquals` assertion is made so that the `os.name` system property for both JVMs is the same. You can write additional assertions to check for more values.
+
+[role='command']
+include::{common-includes}/devmode-test.adoc[]
+
+You will see the following output:
+
+[source,role="no_copy"]
+----
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+Running it.io.openliberty.guides.rest.EndpointIT
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.884 sec - in it.io.openliberty.guides.rest.EndpointIT
+
+Results :
+
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+----
+
+To see whether the tests detect a failure, add an assertion that you know fails, or change the existing assertion to a constant value that doesn't match the `os.name` system property.
+
+[role='command']
+include::{common-includes}/devmode-quit-ctrlc.adoc[]
+
+
+== Great work! You're done!
+
+You just developed a RESTful service in Open Liberty by using Jakarta Restful Web Services and JSON-B.
+
+include::{common-includes}/attribution.adoc[subs="attributes"]

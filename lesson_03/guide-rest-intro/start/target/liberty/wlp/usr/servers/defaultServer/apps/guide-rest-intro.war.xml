@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<archive>
+    <dir sourceOnDisk="C:\Users\002335631\Documents\ibm_documents\open_liberty_study\lesson_03\guide-rest-intro\start\src\main\webapp" targetInArchive="/"/>
+    <dir sourceOnDisk="C:\Users\002335631\Documents\ibm_documents\open_liberty_study\lesson_03\guide-rest-intro\start\target\classes" targetInArchive="/WEB-INF/classes"/>
+    <file sourceOnDisk="C:\Users\002335631\Documents\ibm_documents\open_liberty_study\lesson_03\guide-rest-intro\start\target\tmp\META-INF\MANIFEST.MF" targetInArchive="/META-INF/MANIFEST.MF"/>
+</archive>
