@@ -1,0 +1,356 @@
+// Copyright (c) 2017, 2023 IBM Corporation and others.
+// Licensed under Creative Commons Attribution-NoDerivatives
+// 4.0 International (CC BY-ND 4.0)
+//   https://creativecommons.org/licenses/by-nd/4.0/
+//
+// Contributors:
+//     IBM Corporation
+:projectid: rest-hateoas
+:page-layout: guide-multipane
+:page-duration: 30 minutes
+:page-releasedate: 2017-09-19
+:page-description: Learn how to use Hypermedia As The Engine Of Application State (HATEOAS) to drive your RESTful web service
+:page-related-guides: ['rest-intro', 'microprofile-intro']
+:page-permalink: /guides/{projectid}
+:common-includes: https://raw.githubusercontent.com/OpenLiberty/guides-common/prod
+:page-seo-title: Building a hypermedia-driven RESTful Java microservice using Hypermedia as the Engine of Application State (HATEOAS)
+:page-seo-description: A getting started tutorial on how to use Hypermedia as the Engine of Application State (HATEOAS) to drive a RESTful Java microservice. Learn how to define a JSON response with hypermedia links to navigate your microservice to the appropriate resources.
+:source-highlighter: prettify
+:guide-author: Open Liberty
+= Creating a hypermedia-driven RESTful web service
+
+[.hidden]
+NOTE: This repository contains the guide documentation source. To view the guide in published form, view it on the https://openliberty.io/guides/{projectid}.html[Open Liberty website].
+
+You'll explore how to use Hypermedia As The Engine Of Application State (HATEOAS) to drive your RESTful web service on Open Liberty.
+
+// ==================================================================================
+// What you'll learn
+// ==================================================================================
+== What you'll learn
+
+You will learn how to use hypermedia to create a specific style of a response JSON, which has contents that you can use to navigate your REST service. You'll build on top of a simple inventory REST service that you can develop with MicroProfile technologies. You can find the service at the following URL:
+
+```
+http://localhost:9080/inventory/hosts
+```
+
+The service responds with a JSON file that contains all of the registered hosts. Each host has a collection of HATEOAS links:
+
+[source, json, role="no_copy"]
+----
+{
+  "foo": [
+    {
+      "href": "http://localhost:9080/inventory/hosts/foo",
+      "rel": "self"
+    }
+  ],
+  "bar": [
+    {
+      "href": "http://localhost:9080/inventory/hosts/bar",
+      "rel": "self"
+    }
+  ],
+  "*": [
+    {
+      "href": "http://localhost:9080/inventory/hosts/*",
+      "rel": "self"
+    }
+  ]
+}
+----
+
+=== What is HATEOAS?
+
+HATEOAS is a constraint of REST application architectures. With HATEOAS, the client receives information about the available resources from the REST application. The client does not need to be hardcoded to a fixed set of resources, and the application and client can evolve independently. In other words, the application tells the client where it can go and what it can access by providing it with a simple collection of links to other available resources.
+
+=== Response JSON
+
+In the context of HATEOAS, each resource must contain a link reference to itself, which is commonly referred to as `self`. In this guide, the JSON structure features a mapping between the hostname and its corresponding list of HATEOAS links:
+
+[source, json, role="no_copy"]
+----
+  "*": [
+    {
+      "href": "http://localhost:9080/inventory/hosts/*",
+      "rel": "self"
+    }
+  ]
+----
+
+==== Link types
+
+The following example shows two different links. The first link has a `self` relationship with the resource object and is generated whenever you register a host. The link points to that host entry in the inventory:
+
+[source, json, role="no_copy"]
+----
+  {
+    "href": "http://localhost:9080/inventory/hosts/<hostname>",
+    "rel": "self"
+  }
+----
+
+The second link has a `properties` relationship with the resource object and is generated if the host `system` service is running. The link points to the properties resource on the host:
+
+[source, json, role="no_copy"]
+----
+  {
+    "href": "http://<hostname>:9080/system/properties",
+    "rel": "properties"
+  }
+----
+
+==== Other formats
+
+Although you should stick to the previous format for the purpose of this guide, another common convention has the link as the value of the relationship:
+
+[source, json, role="no_copy"]
+----
+  "_links": {
+      "self": "http://localhost:9080/inventory/hosts/<hostname>",
+      "properties": "http://<hostname>:9080/system/properties"
+  }
+----
+
+[role=command]
+include::{common-includes}/gitclone.adoc[]
+
+include::{common-includes}/twyb-intro.adoc[]
+
+// Static guide instruction
+ifndef::cloud-hosted[]
+After the Liberty instance runs, you can find your hypermedia-driven `inventory` service at the following URL:
+
+* http://localhost:9080/inventory/hosts[^]
+endif::[]
+
+// Cloud hosted guide instruction
+ifdef::cloud-hosted[]
+After the Liberty instance runs, you can find your hypermedia-driven ***inventory*** service at the ***/inventory/hosts*** endpoint. Open another command-line session by selecting **Terminal** > **New Terminal** from the menu of the IDE. Run the following curl command:
+```bash
+curl -s http://localhost:9080/inventory/hosts | jq
+```
+endif::[]
+
+[role=command]
+include::{common-includes}/twyb-end.adoc[]
+
+
+// =================================================================================================
+// Guide
+// =================================================================================================
+
+== Creating the response JSON
+
+Navigate to the `start` directory.
+// Cloud hosted guide instruction
+ifdef::cloud-hosted[]
+```bash
+cd /home/project/guide-rest-hateoas/start
+```
+endif::[]
+
+[role=command]
+include::{common-includes}/devmode-lmp33-start.adoc[]
+
+Begin by building your response JSON, which is composed of the name of the host machine and its list of HATEOAS links.
+
+=== Linking to inventory contents
+
+As mentioned before, your starting point is an existing simple inventory REST service. 
+
+Look at the request handlers in the [hotspot file=0]`InventoryResource.java` file.
+
+The `.../inventory/hosts/` URL will no longer respond with a JSON representation of your inventory contents, so you can discard the `listContents` method and integrate it into the [hotspot=PropertiesForHost file=0]`getPropertiesForHost` method.
+
+[role="code_command hotspot" subs="quotes"]
+----
+#Replace the `InventoryResource` class.#
+`src/main/java/io/openliberty/guides/microprofile/InventoryResource.java`
+----
+
+InventoryResource.java
+[source, java, linenums, role='code_column hide_tags=comment,copyright']
+----
+include::finish/src/main/java/io/openliberty/guides/microprofile/InventoryResource.java[]
+----
+
+// Static guide instruction
+ifndef::cloud-hosted[]
+The contents of your inventory are now under the asterisk (\*) wildcard and reside at the `\http://localhost:9080/inventory/hosts/*` URL.
+endif::[]
+
+// Cloud hosted guide instruction
+ifdef::cloud-hosted[]
+The contents of your inventory are now under the asterisk (`*`) wildcard and reside at the `http://localhost:9080/inventory/hosts/*` URL.
+endif::[]
+
+The [hotspot=handler file=0]`GET` request handler is responsible for handling all [hotspot=handler file=0]`GET` requests that are made to the target URL. This method responds with a JSON that contains HATEOAS links.
+
+The [hotspot=UriInfo file=0]`UriInfo` object is what will be used to build your HATEOAS links.
+
+The [hotspot=Context file=0]`@Context` annotation is a part of CDI and indicates that the `UriInfo` will be injected when the resource is instantiated.
+
+Your new [hotspot=InventoryResource file=0]`InventoryResource` class is now replaced. Next, you will implement the [hotspot=getSystems file=1]`getSystems` method and build the response JSON object.
+
+InventoryManager.java
+[source, java, linenums, role='code_column hide_tags=comment,copyright']
+----
+include::finish/src/main/java/io/openliberty/guides/microprofile/InventoryManager.java[]
+----
+
+=== Linking to each available resource
+
+Take a look at your [hotspot file=0]`InventoryManager` and [hotspot file=1]`InventoryUtil` files.
+
+[role="code_command hotspot" subs="quotes"]
+----
+#Replace the `InventoryManager` class.#
+`src/main/java/io/openliberty/guides/microprofile/InventoryManager.java`
+----
+
+InventoryManager.java
+[source, java, linenums, role='code_column hide_tags=comment,copyright']
+----
+include::finish/src/main/java/io/openliberty/guides/microprofile/InventoryManager.java[]
+----
+
+The [hotspot=getSystems file=0]`getSystems` method accepts a target URL as an argument and returns a JSON object that contains HATEOAS links.
+
+[role="code_command hotspot file=1" subs="quotes"]
+----
+#Replace the `InventoryUtil` class.#
+`src/main/java/io/openliberty/guides/microprofile/util/InventoryUtil.java`
+----
+
+InventoryUtil.java
+[source, java, linenums, role='code_column hide_tags=comment,copyright']
+----
+include::finish/src/main/java/io/openliberty/guides/microprofile/util/InventoryUtil.java[]
+----
+
+The helper builds a link that points to the inventory entry with a [hotspot=self file=1]`self` relationship. The helper also builds a link that points to the `system` service with a [hotspot=properties file=1]`properties` relationship:
+
+// Static guide instruction
+ifndef::cloud-hosted[]
+* \http://localhost:9080/inventory/hosts/<hostname>
+* \http://<hostname>:9080/system/properties
+endif::[]
+
+// Cloud hosted guide instruction
+ifdef::cloud-hosted[]
+* `http://localhost:9080/inventory/hosts/<hostname>`
+* `http://<hostname>:9080/system/properties`
+endif::[]
+
+=== Linking to inactive services or unavailable resources
+InventoryUtil.java
+[source, java, linenums, role='code_column hide_tags=comment,copyright']
+----
+include::finish/src/main/java/io/openliberty/guides/microprofile/util/InventoryUtil.java[]
+----
+
+Consider what happens when one of the return links does not work or when a link should be available for one object but not for another. In other words, it is important that a resource or service is available and running before it is added in the HATEOAS links array of the hostname.
+
+Although this guide does not cover this case, always make sure that you receive a good response code from a service before you link that service. Similarly, make sure that it makes sense for a particular object to access a resource it is linked to. For instance, it doesn't make sense for an account holder to be able to withdraw money from their account when their balance is 0. Hence, the account holder should not be linked to a resource that provides money withdrawal.
+
+[role=command]
+include::{common-includes}/devmode-build.adoc[]
+
+// Static guide instruction
+ifndef::cloud-hosted[]
+After the Liberty instance updates, you can find your new hypermedia-driven `inventory` service at the following URL:
+
+* http://localhost:9080/inventory/hosts[http://localhost:9080/inventory/hosts^]
+endif::[]
+
+// Cloud hosted guide instruction
+ifdef::cloud-hosted[]
+After the Liberty instance updates, you can find your new hypermedia-driven ***inventory*** service at the ***/inventory/hosts*** endpoint. Run the following curl command by another command-line session:
+```bash
+curl -s http://localhost:9080/inventory/hosts | jq
+```
+endif::[]
+
+// =================================================================================================
+// Testing
+// =================================================================================================
+
+== Testing the hypermedia-driven RESTful web service
+
+// Cloud hosted guide instruction
+ifdef::cloud-hosted[]
+If the Liberty instances are running, you can test the application manually by running the following curl commands to access the **inventory** service that is now driven by hypermedia: 
+```bash
+curl -s http://localhost:9080/inventory/hosts | jq
+```
+
+```bash
+curl -s http://localhost:9080/inventory/hosts/localhost| jq
+```
+endif::[]
+
+// Static guide instruction
+ifndef::cloud-hosted[]
+At the following URLs, access the `inventory` service that is now driven by hypermedia:
+
+* http://localhost:9080/inventory/hosts[http://localhost:9080/inventory/hosts^]
+* http://localhost:9080/inventory/hosts/localhost[http://localhost:9080/inventory/hosts/localhost^]
+
+If the Liberty instances are running, you can point your browser to each of the previous URLs to test the application manually. 
+endif::[]
+Nevertheless, you should rely on automated tests because they are more reliable and trigger a failure if a change introduces a defect.
+
+=== Setting up your tests
+
+[role="code_command hotspot" subs="quotes"]
+----
+#Create the `EndpointIT` class.#
+`src/test/java/it/io/openliberty/guides/hateoas/EndpointIT.java`
+----
+
+EndpointIT.java
+[source, java, linenums, role='code_column hide_tags=comment,copyright']
+----
+include::finish/src/test/java/it/io/openliberty/guides/hateoas/EndpointIT.java[]
+----
+
+The [hotspot=Before]`@BeforeEach` and [hotspot=After]`@AfterEach` annotations are placed on setup and teardown tasks that are run for each individual test.
+
+=== Writing the tests
+
+Each test method must be marked with the [hotspot=Test1 hotspot=Test2]`@Test` annotation. The execution order of test methods is controlled by marking them with the [hotspot=Order1 hotspot=Order2]`@Order` annotation. The value that is passed into the annotation denotes the order in which the methods are run.
+
+The [hotspot=testLinkForInventoryContents]`testLinkForInventoryContents` test is responsible for asserting that the correct HATEOAS link is created for the inventory contents.
+
+Finally, the [hotspot=testLinksForSystem]`testLinksForSystem` test is responsible for asserting that the correct HATEOAS links are created for the `localhost` system. This method checks for both the `self` link that points to the `inventory` service and the `properties` link that points to the `system` service, which is running on the `localhost` system.
+
+[role=command]
+include::{common-includes}/devmode-test.adoc[]
+You will see the following output:
+
+[source, role="no_copy"]
+----
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+Running it.io.openliberty.guides.hateoas.EndpointIT
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.951 s - in it.io.openliberty.guides.hateoas.EndpointIT
+
+Results:
+
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0
+
+Integration tests finished.
+----
+
+[role=command]
+include::{common-includes}/devmode-quit-ctrlc.adoc[]
+
+== Great work! You're done!
+
+You've just built and tested a hypermedia-driven RESTful web service on top of Open Liberty.
+
+
+include::{common-includes}/attribution.adoc[subs="attributes"]
