@@ -1,0 +1,336 @@
+//  Copyright (c) 2022, 2023 IBM Corporation and others.
+// Licensed under Creative Commons Attribution-NoDerivatives
+// 4.0 International (CC BY-ND 4.0)
+//   https://creativecommons.org/licenses/by-nd/4.0/
+//
+// Contributors:
+//     IBM Corporation
+//
+:projectid: jakarta-websocket
+:page-layout: guide-multipane
+:page-duration: 25 minutes
+:page-releasedate: 2022-12-16
+:page-essential: false
+:page-description: Learn how to use Jakarta WebSocket to stream messages between client and server services.
+:guide-author: Open Liberty
+:page-tags: ['Jakarta EE']
+:page-related-guides: ['grpc-intro']
+:page-permalink: /guides/{projectid}
+:imagesdir: /img/guide/{projectid}
+:page-seo-title: Streaming messages between client and server services using Jakarta WebSocket
+:page-seo-description: A getting started tutorial with examples on how to stream messages between frontend clients and backend services for full-duplex communication in Java using Jakarta WebSocket API.
+:common-includes: https://raw.githubusercontent.com/OpenLiberty/guides-common/prod
+:source-highlighter: prettify
+= Bidirectional communication between services using Jakarta WebSocket
+
+[.hidden]
+NOTE: This repository contains the guide documentation source. To view the guide in published form, view it on the https://openliberty.io/guides/{projectid}.html[Open Liberty website].
+
+Learn how to use Jakarta WebSocket to send and receive messages between services without closing the connection.
+
+// =================================================================================================
+//  What you'll learn
+// =================================================================================================
+
+== What you'll learn
+
+Jakarta WebSocket enables two-way communication between client and server endpoints. First, each client makes an HTTP connection to a Jakarta WebSocket server. The server can then broadcast messages to the clients. link:https://openliberty.io/guides/reactive-messaging-sse.html[Server-Sent Events (SSE)^] also enables a client to receive automatic updates from a server via an HTTP connection however WebSocket differs from Server-Sent Events in that SSE is unidirectional from server to client, whereas WebSocket is bidirectional. WebSocket also enables real-time updates over a smaller bandwidth than SSE. The connection isn't closed meaning that the client can continue to send and receive messages with the server, without having to poll the server to receive any replies.
+
+The application that you will build in this guide consists of the `client` service and the `system` server service. The following diagram depicts the application that is used in this guide. 
+
+image::architecture.png[Application architecture where system and client services use the Jakarta Websocket API to connect and communicate.,align="center"]
+
+You'll learn how to use the link:https://openliberty.io/docs/latest/reference/javadoc/liberty-jakartaee9.1-javadoc.html?package=jakarta/websocket/package-frame.html&class=overview-summary.html[Jakarta WebSocket API^] to build the `system` service and the scheduler in the `client` service. The scheduler pushes messages to the system service every 10 seconds, then the system service broadcasts the messages to any connected clients. You will also learn how to use a JavaScript `WebSocket` object in an HTML file to build a WebSocket connection, subscribe to different events, and display the broadcasting messages from the `system` service in a table.
+
+// =================================================================================================
+// Getting started
+// =================================================================================================
+[role='command']
+include::{common-includes}/gitclone.adoc[]
+
+=== Try what you'll build
+
+The `finish` directory in the root of this guide contains the finished application. Give it a try before you proceed. 
+
+To try out the application, go to the finish directory and run the following Maven goal to build the `system` service and deploy it to Open Liberty:
+
+[role='command']
+```
+mvn -pl system liberty:run
+
+```
+
+Next, open another command-line session and run the following command to start the `client` service:
+
+[role='command']
+```
+mvn -pl client liberty:run
+```
+
+After you see the following message in both command-line sessions, both your services are ready.
+
+[source, role="no_copy"]
+----
+The defaultServer is ready to run a smarter planet. 
+----
+
+Check out the service at the http://localhost:9080 URL. See that the table is being updated for every 10 seconds. 
+
+After you are finished checking out the application, stop both the `system` and `client` services by pressing `CTRL+C` in the command-line sessions where you ran them. Alternatively, you can run the following goals from the `finish` directory in another command-line session:
+
+[role='command']
+----
+mvn -pl system liberty:stop
+mvn -pl client liberty:stop
+----
+ 
+// =================================================================================================
+// Creating the WebSocket server service
+// =================================================================================================
+
+== Creating the WebSocket server service
+
+In this section, you will create the `system` WebSocket server service that broadcasts messages to clients.
+
+Navigate to the `start` directory to begin.
+
+// cloud-hosted guide instructions:
+ifdef::cloud-hosted[]
+```bash
+cd /home/project/guide-jakarta-websocket/start
+```
+endif::[]
+
+When you run Open Liberty in https://openliberty.io/docs/latest/development-mode.html[dev mode^], dev mode listens for file changes and automatically recompiles and deploys your updates whenever you save a new change. Run the following command to start the `system` service in dev mode:
+
+[role='command']
+```
+mvn -pl system liberty:dev
+```
+
+After you see the following message, your Liberty instance is ready in dev mode:
+
+[source, role="no_copy"]
+----
+**************************************************
+*     Liberty is running in dev mode.
+----
+
+The `system` service is responsible for handling the messages produced by the `client` scheduler, building system load messages, and forwarding them to clients.
+
+[role="code_command hotspot file=0", subs="quotes"]
+----
+#Create the SystemService class.#
+`system/src/main/java/io/openliberty/guides/system/SystemService.java`
+----
+
+// File 0
+SystemService.java
+[source, java, linenums, role='code_column hide_tags=copyright']
+----
+include::finish/system/src/main/java/io/openliberty/guides/system/SystemService.java[]
+----
+
+Annotate the `SystemService` class with a [hotspot=serverEndpoint file=0]`@ServerEndpoint` annotation to make it a WebSocket server. The `@ServerEndpoint`  `value` attribute specifies the URI where the endpoint will be deployed. The `encoders` attribute specifies the classes to encode messages and the `decoders` attribute specifies the classes to decode messages. Provide methods that define the parts of the WebSocket lifecycle like establishing a connection, receiving a message, and closing the connection by annotating them with the [hotspot=onOpen file=0]`@OnOpen`, [hotspot=onMessage file=0]`@OnMessage` and [hotspot=onClose file=0]`@OnClose` annotations respectively. The method that is annotated with the [hotspot=onError file=0]`@OnError` annotation is responsible for tackling errors.
+
+The [hotspot=onOpenMethod file=0]`onOpen()` method stores up the client sessions. The [hotspot=onCloseMethod file=0]`onClose()` method displays the reason for closing the connection and removes the closing session from the client sessions.
+
+The [hotspot=onMessageMethod file=0]`onMessage()` method is called when receiving a message through the `option` parameter. The [hotspot=loadAverage hotspot=memoryUsageOrBoth file=0]`option` parameter signifies which message to construct, either system load, memory usage data, or both, and sends out the [hotspot=sendToAllSessions file=0]`JsonObject` message. The [hotspot=sendToAllSessionseMethod file=0]`sendToAllSessions()` method uses the WebSocket API to broadcast the message to all client sessions.
+
+[role="code_command hotspot file=1", subs="quotes"]
+----
+#Create the SystemLoadEncoder class.#
+`system/src/main/java/io/openliberty/guides/system/SystemLoadEncoder.java`
+----
+
+// File 1
+SystemLoadEncoder.java
+[source, java, linenums, role='code_column hide_tags=copyright']
+----
+include::finish/system/src/main/java/io/openliberty/guides/system/SystemLoadEncoder.java[]
+----
+
+The [hotspot=SystemLoadEncoder file=1]`SystemLoadEncoder` class implements the `Encoder.Text` interface. Override the [hotspot=encode file=1]`encode()` method that accepts the `JsonObject` message and converts the message to a string.
+
+// File 2
+[role="code_command hotspot file=2", subs="quotes"]
+----
+#Create the SystemLoadDecoder class.#
+`system/src/main/java/io/openliberty/guides/system/SystemLoadDecoder.java`
+----
+
+// File 2
+SystemLoadDecoder.java
+[source, java, linenums, role='code_column hide_tags=copyright']
+----
+include::finish/system/src/main/java/io/openliberty/guides/system/SystemLoadDecoder.java[]
+----
+
+The [hotspot=SystemLoadDecoder file=2]`SystemLoadDecoder` class implements the `Decoder.Text` interface.
+Override the [hotspot=decode file=2]`decode()` method that accepts string message and decodes the string back into a `JsonObject`. The [hotspot=willDecode file=2]`willDecode()` override method checks out whether the string can be decoded into a JSON object and returns a Boolean value.
+
+// File 3
+system/server.xml
+[source, xml, linenums, role='code_column']
+----
+include::finish/system/src/main/liberty/config/server.xml[]
+----
+
+The required [hotspot=webSocket file=3]`websocket` and [hotspot=jsonB file=3]`jsonb` features for the `system` service have been enabled for you in the Liberty `server.xml` configuration file.
+
+// =================================================================================================
+// Creating the client service
+// =================================================================================================
+
+== Creating the client service
+
+In this section, you will create the WebSocket client that communicates with the WebSocket server and the scheduler that uses the WebSocket client to send messages to the server. You'll also create an HTML file that uses a JavaScript `WebSocket` object to build a WebSocket connection, subscribe to different events, and display the broadcasting messages from the `system` service in a table.
+
+On another command-line session, navigate to the `start` directory and run the following goal to start the `client` service in dev mode:
+
+[role='command']
+```
+mvn -pl client liberty:dev
+```
+
+After you see the following message, your Liberty instance is ready in dev mode:
+
+[source, role="no_copy"]
+----
+**************************************************
+*     Liberty is running in dev mode.
+----
+
+[role="code_command hotspot file=0", subs="quotes"]
+----
+#Create the SystemClient class.#
+`client/src/main/java/io/openliberty/guides/client/scheduler/SystemClient.java`
+----
+
+// File 0
+client/SystemClient.java
+[source, java, linenums, role='code_column hide_tags=copyright']
+----
+include::finish/client/src/main/java/io/openliberty/guides/client/scheduler/SystemClient.java[]
+----
+
+Annotate the `SystemClient` class with [hotspot=clientEndpoint file=0]`@ClientEndpoint` annotation to make it as a WebSocket client. Create a constructor that uses the [hotspot=webSocketAPI file=0]`websocket` APIs to establish connection with the server. Provide a method with the [hotspot=onOpen file=0]`@OnOpen` annotation that persists the client session when the connection is established. The `onMessage()` method that is annotated with the [hotspot=onMessage file=0]`@OnMessage` annotation handles messages from the server.
+
+[role="code_command hotspot file=1", subs="quotes"]
+----
+#Create the SystemLoadScheduler class.#
+`client/src/main/java/io/openliberty/guides/client/scheduler/SystemLoadScheduler.java`
+----
+
+// File 1
+SystemLoadScheduler.java
+[source, java, linenums, role='code_column hide_tags=copyright']
+----
+include::finish/client/src/main/java/io/openliberty/guides/client/scheduler/SystemLoadScheduler.java[]
+----
+
+The `SystemLoadScheduler` class uses the [hotspot=systemClient file=1]`SystemClient` class to establish a connection to the server by the `ws://localhost:9081/systemLoad` URI at the [hotspot=postConstruct file=1]`@PostConstruct` annotated method. The [hotspot=sendSystemLoad file=1]`sendSystemLoad()` method calls the client to send a random string from either [hotspot=messages file=1]`loadAverage`, [hotspot=messages file=1]`memoryUsage`, or [hotspot=messages file=1]`both` to the `system` service. Using the link:https://openliberty.io/docs/latest/reference/javadoc/liberty-jakartaee9.1-javadoc.html?package=jakarta/ejb/package-frame.html&class=jakarta/ejb/TimerService.html[Jakarta Enterprise Beans Timer Service^], annotate the `sendSystemLoad()` method with the [hotspot=schedule file=1]`@Schedule` annotation so that it sends out a message every 10 seconds.
+
+Now, create the front-end UI. The images and styles for the UI are provided for you. 
+
+[role="code_command hotspot file=2", subs="quotes"]
+----
+#Create the index.html file.#
+`client/src/main/webapp/index.html`
+----
+
+// File 2
+index.html
+[source, javascript, linenums, role='code_column hide_tags=copyright']
+----
+include::finish/client/src/main/webapp/index.html[]
+----
+
+The `index.html` front-end UI displays a table in which each row contains a time, system load, and the memory usage of the `system` service. Use a JavaScript [hotspot=70 file=2]`WebSocket` object to establish a connection to the server by the `ws://localhost:9081/systemLoad` URI. The [hotspot=72-74 file=2]`webSocket.onopen` event is triggered when the connection is established. The [hotspot=76-85 file=2]`webSocket.onmessage` event receives messages from the server and inserts a row with the data from the message into the table. The [hotspot=87-89 file=2]`webSocket.onerror` event defines how to tackle errors.
+
+// File 3
+client/server.xml
+[source, xml, linenums, role='code_column']
+----
+include::finish/client/src/main/liberty/config/server.xml[]
+----
+
+The required features for the `client` service are enabled for you in the Liberty [hotspot=features file=3]`server.xml` configuration file.
+
+// =================================================================================================
+// Running the application
+// =================================================================================================
+
+== Running the application
+
+Because you are running the `system` and `client` services in dev mode, the changes that you made are automatically picked up. You're now ready to check out your application in your browser.
+
+Point your browser to the http://localhost:9080 URL to test out the `client` service. Notice that the table is updated every 10 seconds.
+
+Visit the http://localhost:9080 URL again on a different tab or browser and verify that both sessions are updated every 10 seconds.
+
+// =================================================================================================
+// Testing the application
+// =================================================================================================
+
+== Testing the application
+
+[role="code_command hotspot file=0", subs="quotes"]
+----
+#Create the SystemClient class.#
+`system/src/test/java/it/io/openliberty/guides/system/SystemClient.java`
+----
+
+// File 0
+system/test/SystemClient.java
+[source, java, linenums, role='code_column hide_tags=copyright']
+----
+include::finish/system/src/test/java/it/io/openliberty/guides/system/SystemClient.java[]
+----
+
+The `SystemClient` class is used to communicate and test the `system` service. Its implementation is similar to the client class from the `client` service that you created in the previous section. At the [hotspot=onMessage file=0]`onMessage()` method, decode and verify the message. 
+
+[role="code_command hotspot file=1", subs="quotes"]
+----
+#Create the SystemServiceIT class.#
+`system/src/test/java/it/io/openliberty/guides/system/SystemServiceIT.java`
+----
+
+// File 1
+SystemServiceIT.java
+[source, java, linenums, role='code_column hide_tags=copyright']
+----
+include::finish/system/src/test/java/it/io/openliberty/guides/system/SystemServiceIT.java[]
+----
+
+There are two test cases to ensure correct functionality of the `system` service. The [hotspot=testSystem file=1]`testSystem()` method verifies one client connection and the [hotspot=testSystemMultipleSessions file=1]`testSystemMultipleSessions()` method verifies multiple client connections. 
+
+=== Running the tests
+
+Because you started Open Liberty in dev mode, you can run the tests by pressing the `enter/return` key from the command-line session where you started the `system` service.
+
+[source, role="no_copy"]
+----
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+Running it.io.openliberty.guides.system.SystemServiceIT
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.247 s - in it.io.openliberty.guides.system.SystemServiceIT
+
+Results:
+
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0
+----
+
+When you are done checking out the services, exit dev mode by pressing `CTRL+C` in the command-line sessions where you ran the `system` and `client` services.
+
+// =================================================================================================
+// Great work! You're done!
+// =================================================================================================
+
+== Great work! You're done!
+
+You developed an application that subscribes to real time updates by using Jakarta WebSocket and Open Liberty.
+
+include::{common-includes}/attribution.adoc[subs="attributes"]
+
